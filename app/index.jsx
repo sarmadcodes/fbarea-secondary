@@ -1,20 +1,13 @@
+// index.jsx - FIXED VERSION
 import React, { useEffect } from 'react';
-import { View, Image, StyleSheet, StatusBar, Text } from 'react-native';
-import { useRouter } from 'expo-router';
+import { View, Image, StyleSheet, StatusBar, Text, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '../constants/Colors';
 
-export default function SplashScreen() {
-  const router = useRouter();
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      router.replace('/(auth)/login');
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, []);
-
+export default function Index() {
+  // Remove all navigation logic - let _layout handle it
+  // This is now just a splash screen
+  
   return (
     <LinearGradient
       colors={[Colors.primary, Colors.secondary]}
@@ -34,6 +27,11 @@ export default function SplashScreen() {
           <Text style={styles.subText}>Federal B Area</Text>
           <Text style={styles.titleText}>Resident Welfare Association</Text>
         </View>
+        <ActivityIndicator 
+          size="large" 
+          color="#FFFFFF" 
+          style={{ marginTop: 30 }} 
+        />
       </View>
     </LinearGradient>
   );
@@ -65,17 +63,17 @@ const styles = StyleSheet.create({
   blockText: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#FFB347', // Light orange
+    color: '#FFB347',
     marginBottom: 8,
   },
   subText: {
     fontSize: 20,
-    color: Colors.white,
+    color: '#FFFFFF',
     marginBottom: 4,
   },
   titleText: {
     fontSize: 18,
-    color: Colors.white,
+    color: '#FFFFFF',
     fontWeight: '500',
   },
 });

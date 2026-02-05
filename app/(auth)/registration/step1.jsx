@@ -13,23 +13,59 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '../../../constants/Colors';
+import authService from '../../../services/authService';
+import { useCustomAlert } from '../../../components/CustomAlert';
 
 export default function RegistrationStep1() {
   const router = useRouter();
+  const { showAlert, AlertComponent } = useCustomAlert();
   const [formData, setFormData] = useState({
     fullName: '',
     phoneNumber: '',
     email: '',
   });
 
-  const handleNext = () => {
-    // Validate and save to AsyncStorage
-    router.push('/(auth)/registration/step2');
+  const formatPhoneNumber = (text) => {
+    // Remove all non-digit characters
+    const cleaned = text.replace(/\D/g, '');
+    
+    // Limit to 11 digits
+    const limited = cleaned.slice(0, 11);
+    
+    // Add dash after 4th digit
+    if (limited.length <= 4) {
+      return limited;
+    } else {
+      return `${limited.slice(0, 4)}-${limited.slice(4)}`;
+    }
+  };
+
+  const handlePhoneChange = (text) => {
+    const formatted = formatPhoneNumber(text);
+    setFormData({ ...formData, phoneNumber: formatted });
+  };
+
+  const handleNext = async () => {
+    try {
+      // Save locally first
+      await authService.saveStep1({
+        fullName: formData.fullName,
+        phoneNumber: formData.phoneNumber,
+        email: formData.email,
+      });
+      
+      router.push('/(auth)/registration/step2');
+    } catch (error) {
+      showAlert('Error', error.message, [], 'error');
+    }
   };
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
+
+      {/* Custom Alert */}
+      <AlertComponent />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.keyboardView}
@@ -72,7 +108,7 @@ export default function RegistrationStep1() {
                   placeholder="03XX-XXXXXXX"
                   placeholderTextColor={Colors.textLight}
                   value={formData.phoneNumber}
-                  onChangeText={(text) => setFormData({ ...formData, phoneNumber: text })}
+                  onChangeText={handlePhoneChange}
                   keyboardType="phone-pad"
                   maxLength={12}
                 />

@@ -4,14 +4,19 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '../../constants/Colors';
+import { useCustomAlert } from '../../components/CustomAlert';
 
 export default function Terms() {
   const router = useRouter();
+  const { showAlert, AlertComponent } = useCustomAlert();
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       
+
+      {/* Custom Alert */}
+      <AlertComponent />
       <LinearGradient colors={[Colors.primary, Colors.secondary]} style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={Colors.white} />

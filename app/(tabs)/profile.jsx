@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,25 +6,76 @@ import {
   StyleSheet,
   ScrollView,
   StatusBar,
-  Alert,
+  ActivityIndicator,
+  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '../../constants/Colors';
+import userService from '../../services/userService';
+import { useAuth } from '../../context/AuthContext';
+import { useCustomAlert } from '../../components/CustomAlert';
 
 export default function Profile() {
   const router = useRouter();
+  const { showAlert, AlertComponent } = useCustomAlert();
+  const { user: authUser, logout, isLoggingOut } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [userData, setUserData] = useState(null);
+
+  useEffect(() => {
+    // ✅ Don't fetch if logging out
+    if (!isLoggingOut && authUser) {
+      fetchUserData();
+    } else {
+      setLoading(false);
+    }
+  }, [authUser, isLoggingOut]);
+
+  const fetchUserData = async () => {
+    // ✅ Double check we're not logging out
+    if (isLoggingOut) {
+      console.log('[PROFILE] Skipping fetch - logout in progress');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await userService.getProfile();
+      if (response.data?.user) {
+        setUserData(response.data.user);
+      }
+    } catch (error) {
+      // ✅ Don't show error if we're logging out or not authenticated
+      if (!isLoggingOut && error.response?.status !== 401) {
+        console.error('Error fetching user data:', error);
+        showAlert('Error', 'Failed to load profile data', [], 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to logout?', [
+    showAlert('Logout', 'Are you sure you want to logout?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Logout',
         style: 'destructive',
-        onPress: () => router.replace('/(auth)/login'),
+        onPress: async () => {
+          try {
+            // ✅ Call logout from context (handles everything)
+            await logout();
+            // Navigation will be handled by NavigationGuard in _layout
+          } catch (error) {
+            console.error('Logout error:', error);
+            // Force navigation even on error
+            router.replace('/(auth)/login');
+          }
+        },
       },
-    ]);
+    ], 'warning');
   };
 
   const menuItems = [
@@ -49,12 +100,44 @@ export default function Profile() {
       color: '#FF9800',
       bgColor: '#FFF3E0',
     },
+    {
+      icon: 'help-circle-outline',
+      label: 'Help & Support',
+      route: '/screens/helpSupport',
+      color: '#9C27B0',
+      bgColor: '#F3E5F5',
+    },
   ];
+
+  // ✅ Show loading while logging out
+  if (isLoggingOut) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.secondary} />
+        <Text style={styles.loadingText}>Logging out...</Text>
+      </View>
+    );
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={Colors.secondary} />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  // ✅ Use userData if available, fallback to authUser
+  const displayUser = userData || authUser;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       
+
+      {/* Custom Alert */}
+      <AlertComponent />
       {/* Header */}
       <LinearGradient colors={[Colors.primary, Colors.secondary]} style={styles.header}>
         <TouchableOpacity onPress={() => router.push('/(tabs)')} style={styles.homeButton}>
@@ -63,11 +146,25 @@ export default function Profile() {
         <View style={styles.headerCenter}>
           <View style={styles.profileSection}>
             <View style={styles.profilePic}>
-              <Ionicons name="person" size={48} color={Colors.white} />
+              {displayUser?.profilePicture?.url ? (
+                <Image
+                  source={{ uri: displayUser.profilePicture.url }}
+                  style={styles.profileImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Ionicons name="person" size={48} color={Colors.white} />
+              )}
             </View>
-            <Text style={styles.profileName}>Muhammad Ahmed</Text>
-            <Text style={styles.profileDetail}>Block 13, House A-123</Text>
-            <Text style={styles.profileDetail}>42101-1234567-1</Text>
+            <Text style={styles.profileName}>
+              {displayUser?.fullName || 'User'}
+            </Text>
+            <Text style={styles.profileDetail}>
+              Block 13, House {displayUser?.houseNumber || 'N/A'}
+            </Text>
+            <Text style={styles.profileDetail}>
+              {displayUser?.cnicNumber || 'N/A'}
+            </Text>
           </View>
         </View>
         <View style={{ width: 40 }} />
@@ -80,6 +177,7 @@ export default function Profile() {
               key={index}
               style={styles.menuCard}
               onPress={() => router.push(item.route)}
+              disabled={isLoggingOut}
             >
               <View style={[styles.menuIcon, { backgroundColor: item.bgColor }]}>
                 <Ionicons name={item.icon} size={24} color={item.color} />
@@ -90,13 +188,17 @@ export default function Profile() {
           ))}
         </View>
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <TouchableOpacity 
+          style={styles.logoutButton} 
+          onPress={handleLogout}
+          disabled={isLoggingOut}
+        >
           <Ionicons name="log-out-outline" size={24} color={Colors.error} />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
 
         <View style={styles.version}>
-          <Text style={styles.versionText}>Version 1.0.0</Text>
+          
         </View>
       </ScrollView>
     </View>
@@ -108,17 +210,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: Colors.text,
+  },
   header: {
     paddingTop: 50,
-    paddingBottom: 40,
+    paddingBottom: 60,
     paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-  },
-  backButton: {
-    padding: 8,
-    marginTop: 8,
   },
   homeButton: {
     padding: 8,
@@ -129,6 +238,7 @@ const styles = StyleSheet.create({
   },
   profileSection: {
     alignItems: 'center',
+    marginTop: 30,
   },
   profilePic: {
     width: 100,
@@ -140,6 +250,11 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 3,
     borderColor: Colors.white,
+    overflow: 'hidden',
+  },
+  profileImage: {
+    width: '100%',
+    height: '100%',
   },
   profileName: {
     fontSize: 24,

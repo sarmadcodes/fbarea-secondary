@@ -1,10 +1,10 @@
 {
   "expo": {
     "name": "Block 13 Resident App",
-    "slug": "fbarea",
-    "version": "1.0.0",
+    "slug": "fbarea-secondary",
+    "version": "1.0.2",
     "orientation": "portrait",
-    "scheme": "fbarea",
+    "scheme": "fbarea-secondary",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,7 +15,13 @@
     "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.fbarea.residentapp"
+      "bundleIdentifier": "com.fbarea.residentapp",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification",
+          "remote-notification"
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,27 +31,69 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.fbarea.residentapp",
+      "versionCode": 3,
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE"
+        "WRITE_EXTERNAL_STORAGE",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK"
       ]
+    },
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#2C3E50",
+      "androidMode": "default",
+      "androidCollapsedTitle": "{{unread_count}} new notifications"
     },
     "web": {
       "output": "static"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#2C3E50",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#2C3E50",
+          "defaultChannel": "default",
+          "sounds": []
+        }
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
     "extra": {
-      "router": {},
+      "router": {
+        "origin": false
+      },
       "eas": {
-        "projectId": "21cfeb53-cc64-4604-8cb9-1ca8f60ee99e"
+        "projectId": "ea624bc7-1c93-4226-97e2-f6b50bfa7697"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ea624bc7-1c93-4226-97e2-f6b50bfa7697"
     }
   }
 }
