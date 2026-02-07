@@ -8,10 +8,12 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import Colors from '../../constants/Colors';
 import userService from '../../services/userService';
 import { useCustomAlert } from '../../components/CustomAlert';
@@ -28,62 +30,108 @@ export default function Security() {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  const [touched, setTouched] = useState({
+    current: false,
+    new: false,
+    confirm: false,
+  });
+
   const handleChangePassword = async () => {
-    // Validation
+    Keyboard.dismiss();
+
+    // Validation with haptic feedback
     if (!currentPassword || !newPassword || !confirmPassword) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showAlert('Error', 'Please fill all fields', [], 'error');
       return;
     }
     
     if (newPassword.length < 6) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showAlert('Error', 'New password must be at least 6 characters', [], 'error');
       return;
     }
     
     if (newPassword !== confirmPassword) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       showAlert('Error', 'New passwords do not match', [], 'error');
       return;
     }
 
     try {
       setLoading(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
       await userService.changePassword(currentPassword, newPassword, confirmPassword);
       
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       showAlert('Success', 'Password changed successfully!', [
-          {
-            text: 'OK',
-            onPress: () => {
-              setCurrentPassword('');
-              setNewPassword('');
-              setConfirmPassword('');
-            }
+        {
+          text: 'OK',
+          onPress: () => {
+            setCurrentPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+            setTouched({ current: false, new: false, confirm: false });
           }
-        ], 'success');
+        }
+      ], 'success');
     } catch (error) {
-      showAlert('Error', error.message || 'Failed to change password');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      showAlert('Error', error.message || 'Failed to change password', [], 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const isValid = currentPassword && newPassword.length >= 6 && newPassword === confirmPassword;
+  const togglePasswordVisibility = (field) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    switch(field) {
+      case 'current':
+        setShowCurrentPassword(!showCurrentPassword);
+        break;
+      case 'new':
+        setShowNewPassword(!showNewPassword);
+        break;
+      case 'confirm':
+        setShowConfirmPassword(!showConfirmPassword);
+        break;
+    }
+  };
+
+  const hasUpperCase = /[A-Z]/.test(newPassword);
+  const hasLowerCase = /[a-z]/.test(newPassword);
+  const hasNumber = /[0-9]/.test(newPassword);
+  const hasMinLength = newPassword.length >= 6;
+  const passwordsMatch = newPassword === confirmPassword && confirmPassword.length > 0;
+
+  const isValid = currentPassword && hasMinLength && passwordsMatch;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
-
-      {/* Custom Alert */}
       <AlertComponent />
+
       <LinearGradient colors={[Colors.primary, Colors.secondary]} style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity 
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.back();
+          }} 
+          style={styles.backButton}
+          activeOpacity={0.7}
+        >
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Security</Text>
         <View style={{ width: 24 }} />
       </LinearGradient>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Change Password</Text>
           <Text style={styles.sectionDescription}>
@@ -93,7 +141,10 @@ export default function Security() {
           {/* Current Password */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Current Password</Text>
-            <View style={styles.inputWrapper}>
+            <View style={[
+              styles.inputWrapper,
+              touched.current && !currentPassword && styles.inputError
+            ]}>
               <Ionicons name="lock-closed-outline" size={20} color={Colors.textLight} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
@@ -101,12 +152,15 @@ export default function Security() {
                 placeholderTextColor={Colors.textLight}
                 value={currentPassword}
                 onChangeText={setCurrentPassword}
+                onBlur={() => setTouched({...touched, current: true})}
                 secureTextEntry={!showCurrentPassword}
                 editable={!loading}
+                autoCapitalize="none"
               />
               <TouchableOpacity
                 style={styles.eyeIcon}
-                onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                onPress={() => togglePasswordVisibility('current')}
+                activeOpacity={0.7}
               >
                 <Ionicons
                   name={showCurrentPassword ? 'eye-off-outline' : 'eye-outline'}
@@ -115,12 +169,18 @@ export default function Security() {
                 />
               </TouchableOpacity>
             </View>
+            {touched.current && !currentPassword && (
+              <Text style={styles.errorText}>Current password is required</Text>
+            )}
           </View>
 
           {/* New Password */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>New Password</Text>
-            <View style={styles.inputWrapper}>
+            <View style={[
+              styles.inputWrapper,
+              touched.new && !hasMinLength && styles.inputError
+            ]}>
               <Ionicons name="lock-closed-outline" size={20} color={Colors.textLight} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
@@ -128,12 +188,15 @@ export default function Security() {
                 placeholderTextColor={Colors.textLight}
                 value={newPassword}
                 onChangeText={setNewPassword}
+                onBlur={() => setTouched({...touched, new: true})}
                 secureTextEntry={!showNewPassword}
                 editable={!loading}
+                autoCapitalize="none"
               />
               <TouchableOpacity
                 style={styles.eyeIcon}
-                onPress={() => setShowNewPassword(!showNewPassword)}
+                onPress={() => togglePasswordVisibility('new')}
+                activeOpacity={0.7}
               >
                 <Ionicons
                   name={showNewPassword ? 'eye-off-outline' : 'eye-outline'}
@@ -147,7 +210,10 @@ export default function Security() {
           {/* Confirm Password */}
           <View style={styles.inputGroup}>
             <Text style={styles.label}>Confirm New Password</Text>
-            <View style={styles.inputWrapper}>
+            <View style={[
+              styles.inputWrapper,
+              touched.confirm && !passwordsMatch && confirmPassword.length > 0 && styles.inputError
+            ]}>
               <Ionicons name="lock-closed-outline" size={20} color={Colors.textLight} style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
@@ -155,12 +221,15 @@ export default function Security() {
                 placeholderTextColor={Colors.textLight}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
+                onBlur={() => setTouched({...touched, confirm: true})}
                 secureTextEntry={!showConfirmPassword}
                 editable={!loading}
+                autoCapitalize="none"
               />
               <TouchableOpacity
                 style={styles.eyeIcon}
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                onPress={() => togglePasswordVisibility('confirm')}
+                activeOpacity={0.7}
               >
                 <Ionicons
                   name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
@@ -177,28 +246,72 @@ export default function Security() {
           {/* Password Requirements */}
           <View style={styles.requirementsCard}>
             <Text style={styles.requirementsTitle}>Password Requirements:</Text>
+            
             <View style={styles.requirement}>
               <Ionicons
-                name={newPassword.length >= 6 ? 'checkmark-circle' : 'ellipse-outline'}
+                name={hasMinLength ? 'checkmark-circle' : 'ellipse-outline'}
                 size={20}
-                color={newPassword.length >= 6 ? Colors.success : Colors.textLight}
+                color={hasMinLength ? Colors.success : Colors.textLight}
               />
               <Text style={[
                 styles.requirementText,
-                newPassword.length >= 6 && styles.requirementTextMet
+                hasMinLength && styles.requirementTextMet
               ]}>
                 At least 6 characters
               </Text>
             </View>
+
             <View style={styles.requirement}>
               <Ionicons
-                name={isValid ? 'checkmark-circle' : 'ellipse-outline'}
+                name={hasUpperCase ? 'checkmark-circle' : 'ellipse-outline'}
                 size={20}
-                color={isValid ? Colors.success : Colors.textLight}
+                color={hasUpperCase ? Colors.success : Colors.textLight}
               />
               <Text style={[
                 styles.requirementText,
-                isValid && styles.requirementTextMet
+                hasUpperCase && styles.requirementTextMet
+              ]}>
+                Contains uppercase letter
+              </Text>
+            </View>
+
+            <View style={styles.requirement}>
+              <Ionicons
+                name={hasLowerCase ? 'checkmark-circle' : 'ellipse-outline'}
+                size={20}
+                color={hasLowerCase ? Colors.success : Colors.textLight}
+              />
+              <Text style={[
+                styles.requirementText,
+                hasLowerCase && styles.requirementTextMet
+              ]}>
+                Contains lowercase letter
+              </Text>
+            </View>
+
+            <View style={styles.requirement}>
+              <Ionicons
+                name={hasNumber ? 'checkmark-circle' : 'ellipse-outline'}
+                size={20}
+                color={hasNumber ? Colors.success : Colors.textLight}
+              />
+              <Text style={[
+                styles.requirementText,
+                hasNumber && styles.requirementTextMet
+              ]}>
+                Contains number
+              </Text>
+            </View>
+
+            <View style={styles.requirement}>
+              <Ionicons
+                name={passwordsMatch ? 'checkmark-circle' : 'ellipse-outline'}
+                size={20}
+                color={passwordsMatch ? Colors.success : Colors.textLight}
+              />
+              <Text style={[
+                styles.requirementText,
+                passwordsMatch && styles.requirementTextMet
               ]}>
                 Passwords match
               </Text>
@@ -209,6 +322,7 @@ export default function Security() {
             style={[styles.button, (!isValid || loading) && styles.buttonDisabled]} 
             onPress={handleChangePassword}
             disabled={!isValid || loading}
+            activeOpacity={0.7}
           >
             {loading ? (
               <ActivityIndicator color={Colors.white} />
@@ -217,6 +331,7 @@ export default function Security() {
             )}
           </TouchableOpacity>
         </View>
+        <View style={styles.bottomPadding} />
       </ScrollView>
     </View>
   );
@@ -279,6 +394,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: Colors.white,
     paddingHorizontal: 12,
+    transition: 'all 0.2s ease',
+  },
+  inputError: {
+    borderColor: Colors.error,
+    borderWidth: 1.5,
   },
   inputIcon: {
     marginRight: 8,
@@ -347,5 +467,8 @@ const styles = StyleSheet.create({
     color: Colors.white,
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  bottomPadding: {
+    height: 40,
   },
 });

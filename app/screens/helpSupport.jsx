@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import Colors from '../../constants/Colors';
 
 export default function HelpSupport() {
@@ -18,6 +19,7 @@ export default function HelpSupport() {
   const [expandedFAQ, setExpandedFAQ] = useState(null);
 
   const toggleFAQ = (index) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setExpandedFAQ(expandedFAQ === index ? null : index);
   };
 
@@ -52,7 +54,7 @@ export default function HelpSupport() {
       questions: [
         {
           question: 'How do I file a complaint?',
-          answer: 'Go to Complaints tab → Write Complaint. Select complaint type, priority level, and describe your issue (minimum 10 characters). You\'ll receive a complaint number for tracking.',
+          answer: 'Go to Complaints tab → Write Complaint. Select complaint type, priority level, and describe your issue (minimum 10 characters). You will receive a complaint number for tracking.',
         },
         {
           question: 'What types of complaints can I submit?',
@@ -95,10 +97,12 @@ export default function HelpSupport() {
   ];
 
   const handleCall = (phoneNumber) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
   const handleEmail = (email) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     Linking.openURL(`mailto:${email}`);
   };
 
@@ -107,18 +111,27 @@ export default function HelpSupport() {
       <StatusBar barStyle="light-content" />
 
       <LinearGradient colors={[Colors.primary, Colors.secondary]} style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity 
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.back();
+          }} 
+          style={styles.backButton}
+          activeOpacity={0.7}
+        >
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Help & Support</Text>
         <View style={{ width: 24 }} />
       </LinearGradient>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+      >
         {/* Contact Section */}
         <View style={styles.contactCard}>
           <View style={styles.contactHeader}>
-            
             <Text style={styles.contactTitle}>Need Immediate Help?</Text>
           </View>
           <Text style={styles.contactDescription}>
@@ -129,6 +142,7 @@ export default function HelpSupport() {
             <TouchableOpacity 
               style={styles.contactButton}
               onPress={() => handleCall('+923001234567')}
+              activeOpacity={0.7}
             >
               <Ionicons name="call" size={20} color={Colors.white} />
               <View style={styles.contactButtonText}>
@@ -140,6 +154,7 @@ export default function HelpSupport() {
             <TouchableOpacity 
               style={[styles.contactButton, styles.contactButtonSecondary]}
               onPress={() => handleEmail('info@block13rwa.com')}
+              activeOpacity={0.7}
             >
               <Ionicons name="mail" size={20} color={Colors.secondary} />
               <View style={styles.contactButtonText}>
@@ -201,23 +216,20 @@ export default function HelpSupport() {
 
         {/* Still Need Help Card */}
         <View style={styles.stillNeedHelpCard}>
-          
           <Text style={styles.stillNeedHelpTitle}>Still need help?</Text>
           <Text style={styles.stillNeedHelpText}>
-            If you couldn't find the answer you're looking for, please contact our support team. We're here to help!
+            If you could not find the answer you are looking for, please contact our support team. We are here to help!
           </Text>
           <TouchableOpacity 
             style={styles.contactSupportButton}
             onPress={() => handleCall('+923001234567')}
+            activeOpacity={0.7}
           >
-            
             <Text style={styles.contactSupportButtonText}>Contact Support</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.version}>
-          
-        </View>
+        <View style={styles.bottomPadding} />
       </ScrollView>
     </View>
   );
@@ -248,8 +260,6 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
   },
-  
-  // Contact Card Styles
   contactCard: {
     backgroundColor: Colors.white,
     borderRadius: 16,
@@ -324,16 +334,12 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     fontWeight: '500',
   },
-  
-  // Section Title
   sectionTitle: {
     fontSize: 22,
     fontWeight: 'bold',
     color: Colors.text,
     marginBottom: 16,
   },
-  
-  // Category Styles
   categorySection: {
     marginBottom: 24,
   },
@@ -360,8 +366,6 @@ const styles = StyleSheet.create({
     color: Colors.text,
     flex: 1,
   },
-  
-  // FAQ Card Styles
   faqCard: {
     backgroundColor: Colors.white,
     borderRadius: 12,
@@ -406,8 +410,6 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     lineHeight: 22,
   },
-  
-  // Still Need Help Card
   stillNeedHelpCard: {
     backgroundColor: Colors.white,
     borderRadius: 16,
@@ -446,15 +448,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.white,
   },
-  
-  
-  version: {
-    alignItems: 'center',
-    marginBottom: 20,
-    marginTop: 8,
-  },
-  versionText: {
-    fontSize: 12,
-    color: Colors.textLight,
+  bottomPadding: {
+    height: 40,
   },
 });

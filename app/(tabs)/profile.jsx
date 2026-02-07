@@ -8,24 +8,56 @@ import {
   StatusBar,
   ActivityIndicator,
   Image,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Haptics from 'expo-haptics';
 import Colors from '../../constants/Colors';
 import userService from '../../services/userService';
 import { useAuth } from '../../context/AuthContext';
 import { useCustomAlert } from '../../components/CustomAlert';
+
+// Skeleton Loading Component
+const ProfileSkeleton = () => (
+  <View style={styles.container}>
+    <LinearGradient colors={[Colors.primary, Colors.secondary]} style={styles.header}>
+      <View style={styles.homeButton} />
+      <View style={styles.headerCenter}>
+        <View style={styles.profileSection}>
+          <View style={[styles.profilePic, styles.skeleton]} />
+          <View style={[styles.skeletonText, { width: 150, height: 24, marginBottom: 8 }]} />
+          <View style={[styles.skeletonText, { width: 120, height: 14, marginBottom: 4 }]} />
+          <View style={[styles.skeletonText, { width: 140, height: 14 }]} />
+        </View>
+      </View>
+      <View style={{ width: 40 }} />
+    </LinearGradient>
+
+    <ScrollView style={styles.content}>
+      <View style={styles.menuList}>
+        {[1, 2, 3, 4].map((item) => (
+          <View key={item} style={styles.menuCard}>
+            <View style={[styles.menuIcon, styles.skeleton]} />
+            <View style={[styles.skeletonText, { flex: 1, height: 16 }]} />
+            <View style={[styles.skeletonText, { width: 24, height: 24 }]} />
+          </View>
+        ))}
+      </View>
+    </ScrollView>
+  </View>
+);
 
 export default function Profile() {
   const router = useRouter();
   const { showAlert, AlertComponent } = useCustomAlert();
   const { user: authUser, logout, isLoggingOut } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [userData, setUserData] = useState(null);
 
   useEffect(() => {
-    // ✅ Don't fetch if logging out
     if (!isLoggingOut && authUser) {
       fetchUserData();
     } else {
@@ -33,44 +65,57 @@ export default function Profile() {
     }
   }, [authUser, isLoggingOut]);
 
-  const fetchUserData = async () => {
-    // ✅ Double check we're not logging out
+  const fetchUserData = async (isRefresh = false) => {
     if (isLoggingOut) {
       console.log('[PROFILE] Skipping fetch - logout in progress');
       return;
     }
 
     try {
-      setLoading(true);
+      if (!isRefresh) setLoading(true);
       const response = await userService.getProfile();
       if (response.data?.user) {
         setUserData(response.data.user);
       }
     } catch (error) {
-      // ✅ Don't show error if we're logging out or not authenticated
       if (!isLoggingOut && error.response?.status !== 401) {
         console.error('Error fetching user data:', error);
         showAlert('Error', 'Failed to load profile data', [], 'error');
       }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
+  const onRefresh = React.useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setRefreshing(true);
+    fetchUserData(true);
+  }, []);
+
+  const handleMenuPress = (route) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(route);
+  };
+
   const handleLogout = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     showAlert('Logout', 'Are you sure you want to logout?', [
-      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Cancel', 
+        style: 'cancel',
+        onPress: () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+      },
       {
         text: 'Logout',
         style: 'destructive',
         onPress: async () => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           try {
-            // ✅ Call logout from context (handles everything)
             await logout();
-            // Navigation will be handled by NavigationGuard in _layout
           } catch (error) {
             console.error('Logout error:', error);
-            // Force navigation even on error
             router.replace('/(auth)/login');
           }
         },
@@ -109,7 +154,6 @@ export default function Profile() {
     },
   ];
 
-  // ✅ Show loading while logging out
   if (isLoggingOut) {
     return (
       <View style={styles.loadingContainer}>
@@ -120,27 +164,25 @@ export default function Profile() {
   }
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.secondary} />
-        <Text style={styles.loadingText}>Loading profile...</Text>
-      </View>
-    );
+    return <ProfileSkeleton />;
   }
 
-  // ✅ Use userData if available, fallback to authUser
   const displayUser = userData || authUser;
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
-
-      {/* Custom Alert */}
       <AlertComponent />
-      {/* Header */}
+
       <LinearGradient colors={[Colors.primary, Colors.secondary]} style={styles.header}>
-        <TouchableOpacity onPress={() => router.push('/(tabs)')} style={styles.homeButton}>
+        <TouchableOpacity 
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push('/(tabs)');
+          }} 
+          style={styles.homeButton}
+          activeOpacity={0.7}
+        >
           <Ionicons name="home-outline" size={24} color={Colors.white} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -170,14 +212,26 @@ export default function Profile() {
         <View style={{ width: 40 }} />
       </LinearGradient>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={Colors.secondary}
+            colors={[Colors.secondary]}
+          />
+        }
+      >
         <View style={styles.menuList}>
           {menuItems.map((item, index) => (
             <TouchableOpacity
               key={index}
               style={styles.menuCard}
-              onPress={() => router.push(item.route)}
+              onPress={() => handleMenuPress(item.route)}
               disabled={isLoggingOut}
+              activeOpacity={0.7}
             >
               <View style={[styles.menuIcon, { backgroundColor: item.bgColor }]}>
                 <Ionicons name={item.icon} size={24} color={item.color} />
@@ -192,14 +246,13 @@ export default function Profile() {
           style={styles.logoutButton} 
           onPress={handleLogout}
           disabled={isLoggingOut}
+          activeOpacity={0.7}
         >
           <Ionicons name="log-out-outline" size={24} color={Colors.error} />
           <Text style={styles.logoutText}>Logout</Text>
         </TouchableOpacity>
 
-        <View style={styles.version}>
-          
-        </View>
+        <View style={styles.bottomPadding} />
       </ScrollView>
     </View>
   );
@@ -220,6 +273,15 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 16,
     color: Colors.text,
+  },
+  skeleton: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    overflow: 'hidden',
+  },
+  skeletonText: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 4,
+    overflow: 'hidden',
   },
   header: {
     paddingTop: 50,
@@ -318,13 +380,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: Colors.error,
   },
-  version: {
-    alignItems: 'center',
-    marginTop: 24,
-    marginBottom: 20,
-  },
-  versionText: {
-    fontSize: 12,
-    color: Colors.textLight,
+  bottomPadding: {
+    height: 40,
   },
 });

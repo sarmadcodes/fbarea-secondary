@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Modal,
@@ -10,15 +11,14 @@ import {
   Text,
   TouchableOpacity,
   View,
-  ActivityIndicator,
   RefreshControl,
 } from 'react-native';
 import Colors from '../../constants/Colors';
 import userService from '../../services/userService';
 import notificationService from '../../services/notificationService';
 import { useCustomAlert } from '../../components/CustomAlert';
+import { SkeletonHeader, SkeletonActionCard, SkeletonList } from '../../components/Skeleton';
 
-// ✅ TypeScript Interfaces
 interface User {
   _id: string;
   fullName: string;
@@ -41,7 +41,7 @@ interface MenuItem {
   route: string;
 }
 
-export default function Dashboard() {
+const Dashboard = React.memo(() => {
   const router = useRouter();
   const { showAlert, AlertComponent } = useCustomAlert();
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -59,16 +59,15 @@ export default function Dashboard() {
   const isMounted = useRef(true);
   const abortController = useRef<AbortController | null>(null);
 
-  // ✅ Cleanup on unmount
   useEffect(() => {
-    console.log('🚀 Dashboard mounted');
+    console.log('Dashboard mounted');
     isMounted.current = true;
     abortController.current = new AbortController();
     
     initializeApp();
     
     return () => {
-      console.log('📻 Dashboard unmounting - cleaning up');
+      console.log('Dashboard unmounting - cleaning up');
       isMounted.current = false;
       
       if (abortController.current) {
@@ -82,22 +81,20 @@ export default function Dashboard() {
         notificationService.removeNotificationListener(responseListener.current);
       }
       
-      // ✅ Stop polling when unmounting
       notificationService.stopPolling();
     };
   }, []);
 
-  // ✅ Auto-mark all as read when notification panel opens
   useEffect(() => {
     if (notificationsVisible && unreadCount > 0) {
-      console.log('👁️ Notification panel opened - auto-marking all as read...');
+      console.log('Notification panel opened - auto-marking all as read');
       handleMarkAllAsReadSilently();
     }
   }, [notificationsVisible, unreadCount]);
 
   const initializeApp = async () => {
     try {
-      console.log('📱 Initializing app...');
+      console.log('Initializing app');
       await Promise.all([
         fetchUserData(),
         setupNotifications(),
@@ -105,109 +102,92 @@ export default function Dashboard() {
         fetchAnnouncements(),
       ]);
       
-      // ✅ Start polling for live updates after initial load
       startLiveUpdates();
     } catch (error) {
       if (!isMounted.current) return;
-      console.error('❌ Error initializing app:', error);
+      console.error('Error initializing app:', error);
       handleError(error, 'Failed to initialize dashboard');
     }
   };
 
-  // ✅ IMPROVED: Start live updates with proper callback
-  const startLiveUpdates = () => {
-    console.log('🔄 Starting live updates...');
+  const startLiveUpdates = useCallback(() => {
+    console.log('Starting live updates');
     
     notificationService.startPolling((data: any) => {
       if (!isMounted.current) return;
       
-      console.log('🔔 Live update received:', {
+      console.log('Live update received:', {
         notifications: data.notifications?.length || 0,
         announcements: data.announcements?.length || 0,
         unreadCount: data.unreadCount,
-        hasChanges: data.hasChanges,
       });
       
-      // ✅ Update ALL notification types (not just announcements)
       if (data.notifications && Array.isArray(data.notifications)) {
         setNotifications(data.notifications);
-        console.log('📱 Updated notifications state');
       }
       
       if (data.announcements && Array.isArray(data.announcements)) {
         setAnnouncements(data.announcements);
-        console.log('📢 Updated announcements state');
       }
       
       if (typeof data.unreadCount === 'number') {
         setUnreadCount(data.unreadCount);
-        console.log('🔔 Updated unread count:', data.unreadCount);
-      }
-      
-      // ✅ Optional: Show a subtle indicator when new notifications arrive
-      if (data.hasChanges && data.unreadCount > unreadCount) {
-        console.log('🆕 New notifications detected!');
-        // The badge will automatically update due to state change
       }
     });
-  };
+  }, []);
 
   const setupNotifications = async () => {
     try {
-      console.log('🔧 Setting up notifications...');
+      console.log('Setting up notifications');
       notificationService.configure();
 
       const token = await notificationService.registerForPushNotifications();
       
       if (token) {
-        console.log('✅ Push token registered');
+        console.log('Push token registered');
       } else {
-        console.log('ℹ️ Push notifications not available (using API polling)');
+        console.log('Push notifications not available');
       }
 
-      // ✅ Listen for foreground notifications (when app is open)
       notificationListener.current = notificationService.addNotificationListener((notification: any) => {
-        console.log('📬 NEW NOTIFICATION (foreground):', notification);
+        console.log('New notification received:', notification);
         if (isMounted.current) {
-          // Immediately fetch fresh data
           fetchNotifications();
           fetchAnnouncements();
           fetchUnreadCount();
         }
       });
 
-      // ✅ Listen for notification taps (when user clicks notification)
       responseListener.current = notificationService.addNotificationResponseListener((response: any) => {
-        console.log('👆 NOTIFICATION CLICKED:', response);
+        console.log('Notification clicked:', response);
         if (response?.notification?.request?.content?.data && isMounted.current) {
           handleNotificationClick(response.notification.request.content.data);
         }
       });
 
-      console.log('✅ Notification setup complete');
+      console.log('Notification setup complete');
     } catch (error) {
-      console.error('❌ Error setting up notifications:', error);
-      // Don't show alert for notification setup failures
+      console.error('Error setting up notifications:', error);
     }
   };
 
   const handleNotificationClick = useCallback((data: any) => {
-    console.log('🔗 Handling notification click:', data);
+    console.log('Handling notification click:', data);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       if (data?.type === 'payment') {
         router.push('/screens/accounts');
       } else if (data?.type === 'complaint') {
         router.push('/(tabs)/complaints');
       }
-      // Add more navigation logic for other types if needed
     } catch (error) {
-      console.error('❌ Error handling notification click:', error);
+      console.error('Error handling notification click:', error);
     }
   }, [router]);
 
   const fetchUserData = async () => {
     try {
-      console.log('👤 Fetching user data...');
+      console.log('Fetching user data');
       setLoading(true);
       setError(null);
       
@@ -216,14 +196,14 @@ export default function Dashboard() {
       if (!isMounted.current) return;
       
       if (response?.data?.user) {
-        console.log('✅ User data loaded:', response.data.user.fullName);
+        console.log('User data loaded:', response.data.user.fullName);
         setUserData(response.data.user);
       } else {
         throw new Error('Invalid user data received');
       }
     } catch (error) {
       if (!isMounted.current) return;
-      console.error('❌ Error fetching user data:', error);
+      console.error('Error fetching user data:', error);
       handleError(error, 'Failed to load user profile');
     } finally {
       if (isMounted.current) {
@@ -234,72 +214,66 @@ export default function Dashboard() {
 
   const fetchNotifications = async () => {
     try {
-      console.log('📥 Fetching notifications...');
+      console.log('Fetching notifications');
       const response = await notificationService.getNotifications(1, 20);
       
       if (!isMounted.current) return;
       
       if (response?.success && Array.isArray(response.data)) {
-        console.log(`✅ Loaded ${response.data.length} notifications`);
+        console.log(`Loaded ${response.data.length} notifications`);
         setNotifications(response.data);
       } else {
-        console.log('⚠️ No notifications data');
         setNotifications([]);
       }
       
       await fetchUnreadCount();
     } catch (error) {
       if (!isMounted.current) return;
-      console.error('❌ Error fetching notifications:', error);
+      console.error('Error fetching notifications:', error);
       setNotifications([]);
-      // Don't show alert for background fetch failures
     }
   };
 
   const fetchAnnouncements = async () => {
     try {
-      console.log('📢 Fetching announcements...');
+      console.log('Fetching announcements');
       const announcementData = await notificationService.getAnnouncements(1, 10);
       
       if (!isMounted.current) return;
       
       if (Array.isArray(announcementData)) {
-        console.log(`✅ Loaded ${announcementData.length} announcements`);
+        console.log(`Loaded ${announcementData.length} announcements`);
         setAnnouncements(announcementData);
       } else {
-        console.error('❌ Invalid announcement data format');
         setAnnouncements([]);
       }
     } catch (error) {
       if (!isMounted.current) return;
-      console.error('❌ Error fetching announcements:', error);
+      console.error('Error fetching announcements:', error);
       setAnnouncements([]);
-      // Don't show alert for background fetch failures
     }
   };
 
   const fetchUnreadCount = async () => {
     try {
-      console.log('📊 Fetching unread count...');
+      console.log('Fetching unread count');
       const response = await notificationService.getUnreadCount();
       
       if (!isMounted.current) return;
       
       if (response?.success) {
         const count = response.data?.count || 0;
-        console.log(`✅ Unread count: ${count}`);
+        console.log(`Unread count: ${count}`);
         setUnreadCount(count);
       }
     } catch (error) {
       if (!isMounted.current) return;
-      console.error('❌ Error fetching unread count:', error);
-      // Don't show alert for background fetch failures
+      console.error('Error fetching unread count:', error);
     }
   };
 
-  const handleMarkAsRead = async (notificationId: string) => {
+  const handleMarkAsRead = useCallback(async (notificationId: string) => {
     try {
-      console.log('✓ Marking notification as read:', notificationId);
       await notificationService.markAsRead(notificationId);
       
       if (!isMounted.current) return;
@@ -308,14 +282,13 @@ export default function Dashboard() {
       fetchAnnouncements();
     } catch (error) {
       if (!isMounted.current) return;
-      console.error('❌ Error marking as read:', error);
-      // Silent failure for mark as read
+      console.error('Error marking as read:', error);
     }
-  };
+  }, []);
 
-  const handleMarkAllAsRead = async () => {
+  const handleMarkAllAsRead = useCallback(async () => {
     try {
-      console.log('✓ Marking all notifications as read...');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await notificationService.markAllAsRead();
       
       if (!isMounted.current) return;
@@ -325,37 +298,33 @@ export default function Dashboard() {
       showAlert('Success', 'All notifications marked as read', [], 'success');
     } catch (error) {
       if (!isMounted.current) return;
-      console.error('❌ Error marking all as read:', error);
+      console.error('Error marking all as read:', error);
       showAlert('Error', 'Failed to mark all as read', [], 'error');
     }
-  };
+  }, [showAlert]);
 
-  const handleMarkAllAsReadSilently = async () => {
+  const handleMarkAllAsReadSilently = useCallback(async () => {
     try {
-      console.log('✓ Auto-marking all notifications as read...');
       await notificationService.markAllAsRead();
       
       if (!isMounted.current) return;
       
-      // Update local state immediately for better UX
       setUnreadCount(0);
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setAnnouncements(prev => prev.map(a => ({ ...a, isRead: true })));
       
-      // Then fetch fresh data
       fetchNotifications();
       fetchAnnouncements();
     } catch (error) {
       if (!isMounted.current) return;
-      console.error('❌ Error auto-marking as read:', error);
-      // Silent failure
+      console.error('Error auto-marking as read:', error);
     }
-  };
+  }, []);
 
-  const handleAnnouncementClick = async (announcement: Notification) => {
+  const handleAnnouncementClick = useCallback(async (announcement: Notification) => {
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       if (!announcement.isRead) {
-        console.log('✓ Marking announcement as read:', announcement._id);
         await notificationService.markAsRead(announcement._id);
         
         if (!isMounted.current) return;
@@ -370,15 +339,14 @@ export default function Dashboard() {
       handleNotificationClick(announcement);
     } catch (error) {
       if (!isMounted.current) return;
-      console.error('❌ Error marking announcement as read:', error);
-      // Still navigate even if mark as read fails
+      console.error('Error marking announcement as read:', error);
       handleNotificationClick(announcement);
     }
-  };
+  }, [handleNotificationClick]);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     try {
-      console.log('🔄 Refreshing dashboard...');
+      console.log('Refreshing dashboard');
       setRefreshing(true);
       setError(null);
       
@@ -388,23 +356,23 @@ export default function Dashboard() {
         fetchAnnouncements(),
       ]);
       
-      console.log('✅ Refresh complete');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      console.log('Refresh complete');
     } catch (error) {
       if (!isMounted.current) return;
-      console.error('❌ Error refreshing:', error);
+      console.error('Error refreshing:', error);
       handleError(error, 'Failed to refresh dashboard');
     } finally {
       if (isMounted.current) {
         setRefreshing(false);
       }
     }
-  };
+  }, []);
 
   const handleError = (error: any, fallbackMessage: string) => {
     const errorMessage = error instanceof Error ? error.message : fallbackMessage;
     setError(errorMessage);
     
-    // Only show critical errors to user
     if (!error?.toString().includes('abort')) {
       console.error('Error:', errorMessage);
     }
@@ -437,35 +405,23 @@ export default function Dashboard() {
 
   const getNotificationIcon = useCallback((type: string): keyof typeof Ionicons.glyphMap => {
     switch (type) {
-      case 'payment':
-        return 'wallet-outline';
-      case 'complaint':
-        return 'warning-outline';
-      case 'announcement':
-        return 'megaphone-outline';
-      case 'maintenance':
-        return 'construct-outline';
-      case 'security':
-        return 'shield-outline';
-      default:
-        return 'notifications-outline';
+      case 'payment': return 'wallet-outline';
+      case 'complaint': return 'warning-outline';
+      case 'announcement': return 'megaphone-outline';
+      case 'maintenance': return 'construct-outline';
+      case 'security': return 'shield-outline';
+      default: return 'notifications-outline';
     }
   }, []);
 
   const getNotificationColor = useCallback((type: string) => {
     switch (type) {
-      case 'payment':
-        return '#4CAF50';
-      case 'complaint':
-        return '#FF9800';
-      case 'announcement':
-        return '#2196F3';
-      case 'maintenance':
-        return '#9C27B0';
-      case 'security':
-        return '#F44336';
-      default:
-        return Colors.primary;
+      case 'payment': return '#4CAF50';
+      case 'complaint': return '#FF9800';
+      case 'announcement': return '#2196F3';
+      case 'maintenance': return '#9C27B0';
+      case 'security': return '#F44336';
+      default: return Colors.primary;
     }
   }, []);
 
@@ -484,35 +440,55 @@ export default function Dashboard() {
 
   const handleQuickActionPress = useCallback((route: string) => {
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       router.push(route as any);
     } catch (error) {
       console.error('Navigation error:', error);
       showAlert('Error', 'Failed to navigate to page', [], 'error');
     }
-  }, [router]);
+  }, [router, showAlert]);
 
   const handleMenuItemPress = useCallback((route: string) => {
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setDrawerVisible(false);
       router.push(route as any);
     } catch (error) {
       console.error('Navigation error:', error);
       showAlert('Error', 'Failed to navigate to page', [], 'error');
     }
-  }, [router]);
+  }, [router, showAlert]);
+
+  const handleDrawerOpen = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDrawerVisible(true);
+  }, []);
+
+  const handleDrawerClose = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDrawerVisible(false);
+  }, []);
+
+  const handleNotificationsOpen = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setNotificationsVisible(true);
+  }, []);
+
+  const handleNotificationsClose = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setNotificationsVisible(false);
+  }, []);
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
 
-      {/* Custom Alert */}
       <AlertComponent />
       
-      {/* Header */}
       <LinearGradient colors={[Colors.primary, Colors.secondary]} style={styles.header}>
         <View style={styles.headerContent}>
           <TouchableOpacity 
-            onPress={() => setDrawerVisible(true)}
+            onPress={handleDrawerOpen}
             accessible={true}
             accessibilityLabel="Open menu"
             accessibilityRole="button"
@@ -525,7 +501,7 @@ export default function Dashboard() {
           </View>
           
           <TouchableOpacity 
-            onPress={() => setNotificationsVisible(true)}
+            onPress={handleNotificationsOpen}
             accessible={true}
             accessibilityLabel={`Notifications, ${unreadCount} unread`}
             accessibilityRole="button"
@@ -548,7 +524,6 @@ export default function Dashboard() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Error State */}
         {error && !loading && (
           <View style={styles.errorBanner}>
             <Ionicons name="alert-circle-outline" size={20} color={Colors.error} />
@@ -559,7 +534,6 @@ export default function Dashboard() {
           </View>
         )}
 
-        {/* Banner */}
         <View style={styles.banner}>
           <LinearGradient
             colors={['#4CAF50', '#A5D6A7']}
@@ -568,7 +542,7 @@ export default function Dashboard() {
             style={styles.bannerGradient}
           >
             {loading ? (
-              <ActivityIndicator size="small" color={Colors.white} />
+              <SkeletonHeader />
             ) : (
               <>
                 <Text style={styles.bannerTitle}>
@@ -580,96 +554,86 @@ export default function Dashboard() {
           </LinearGradient>
         </View>
 
-        {/* Quick Actions */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickActions}>
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => handleQuickActionPress('/screens/digitalCard')}
-              accessible={true}
-              accessibilityLabel="Digital Card"
-              accessibilityRole="button"
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#E3F2FD' }]}>
-                <Ionicons name="card-outline" size={28} color="#2196F3" />
-              </View>
-              <Text style={styles.actionLabel}>Digital Card</Text>
-            </TouchableOpacity>
+          {loading ? (
+            <View style={styles.quickActions}>
+              {[...Array(6)].map((_, i) => (
+                <SkeletonActionCard key={i} />
+              ))}
+            </View>
+          ) : (
+            <View style={styles.quickActions}>
+              <TouchableOpacity
+                style={styles.actionCard}
+                onPress={() => handleQuickActionPress('/screens/digitalCard')}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: '#E3F2FD' }]}>
+                  <Ionicons name="card-outline" size={28} color="#2196F3" />
+                </View>
+                <Text style={styles.actionLabel}>Digital Card</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => handleQuickActionPress('/screens/accounts')}
-              accessible={true}
-              accessibilityLabel="Accounts"
-              accessibilityRole="button"
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#E8F5E9' }]}>
-                <Ionicons name="wallet-outline" size={28} color="#4CAF50" />
-              </View>
-              <Text style={styles.actionLabel}>Accounts</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionCard}
+                onPress={() => handleQuickActionPress('/screens/accounts')}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: '#E8F5E9' }]}>
+                  <Ionicons name="wallet-outline" size={28} color="#4CAF50" />
+                </View>
+                <Text style={styles.actionLabel}>Accounts</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => handleQuickActionPress('/(tabs)/complaints')}
-              accessible={true}
-              accessibilityLabel="Complaints"
-              accessibilityRole="button"
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#FFF3E0' }]}>
-                <Ionicons name="warning-outline" size={28} color="#FF9800" />
-              </View>
-              <Text style={styles.actionLabel}>Complaints</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionCard}
+                onPress={() => handleQuickActionPress('/(tabs)/complaints')}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: '#FFF3E0' }]}>
+                  <Ionicons name="warning-outline" size={28} color="#FF9800" />
+                </View>
+                <Text style={styles.actionLabel}>Complaints</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => handleQuickActionPress('/screens/deals-discounts')}
-              accessible={true}
-              accessibilityLabel="Deals & Discounts"
-              accessibilityRole="button"
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#FCE4EC' }]}>
-                <Ionicons name="pricetags-outline" size={28} color="#E91E63" />
-              </View>
-              <Text style={styles.actionLabel}>Deals</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionCard}
+                onPress={() => handleQuickActionPress('/screens/deals-discounts')}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: '#FCE4EC' }]}>
+                  <Ionicons name="pricetags-outline" size={28} color="#E91E63" />
+                </View>
+                <Text style={styles.actionLabel}>Deals</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => handleQuickActionPress('/screens/guest-requests')}
-              accessible={true}
-              accessibilityLabel="Guest Requests"
-              accessibilityRole="button"
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#E1F5FE' }]}>
-                <Ionicons name="people-outline" size={28} color="#03A9F4" />
-              </View>
-              <Text style={styles.actionLabel}>Guests</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.actionCard}
+                onPress={() => handleQuickActionPress('/screens/guest-requests')}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: '#E1F5FE' }]}>
+                  <Ionicons name="people-outline" size={28} color="#03A9F4" />
+                </View>
+                <Text style={styles.actionLabel}>Guests</Text>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.actionCard}
-              onPress={() => handleQuickActionPress('/(tabs)/profile')}
-              accessible={true}
-              accessibilityLabel="Settings"
-              accessibilityRole="button"
-            >
-              <View style={[styles.actionIcon, { backgroundColor: '#F3E5F5' }]}>
-                <Ionicons name="settings-outline" size={28} color="#9C27B0" />
-              </View>
-              <Text style={styles.actionLabel}>Settings</Text>
-            </TouchableOpacity>
-          </View>
+              <TouchableOpacity
+                style={styles.actionCard}
+                onPress={() => handleQuickActionPress('/(tabs)/profile')}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: '#F3E5F5' }]}>
+                  <Ionicons name="settings-outline" size={28} color="#9C27B0" />
+                </View>
+                <Text style={styles.actionLabel}>Settings</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
 
-        {/* Announcements Section */}
-        {announcements.length > 0 && (
+        {loading ? (
+          <SkeletonList count={3} />
+        ) : announcements.length > 0 ? (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Recent Announcements</Text>
-              <TouchableOpacity onPress={() => setNotificationsVisible(true)}>
+              <TouchableOpacity onPress={handleNotificationsOpen}>
                 <Text style={styles.viewAllText}>View All</Text>
               </TouchableOpacity>
             </View>
@@ -678,9 +642,6 @@ export default function Dashboard() {
                 key={notif._id}
                 style={styles.announcementCard}
                 onPress={() => handleAnnouncementClick(notif)}
-                accessible={true}
-                accessibilityLabel={`${notif.title}, ${notif.isRead ? 'read' : 'unread'}`}
-                accessibilityRole="button"
               >
                 <View style={[
                   styles.announcementIcon,
@@ -712,10 +673,7 @@ export default function Dashboard() {
               </TouchableOpacity>
             ))}
           </View>
-        )}
-
-        {/* Empty State */}
-        {announcements.length === 0 && !loading && (
+        ) : (
           <View style={styles.emptyState}>
             <Ionicons name="megaphone-outline" size={64} color={Colors.textLight} />
             <Text style={styles.emptyStateTitle}>No Announcements Yet</Text>
@@ -726,27 +684,21 @@ export default function Dashboard() {
         )}
       </ScrollView>
 
-      {/* Drawer Modal */}
       <Modal
         visible={drawerVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setDrawerVisible(false)}
+        onRequestClose={handleDrawerClose}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setDrawerVisible(false)}
+          onPress={handleDrawerClose}
         >
           <View style={styles.drawer} onStartShouldSetResponder={() => true}>
             <View style={styles.drawerHeader}>
               <Text style={styles.drawerTitle}>Menu</Text>
-              <TouchableOpacity 
-                onPress={() => setDrawerVisible(false)}
-                accessible={true}
-                accessibilityLabel="Close menu"
-                accessibilityRole="button"
-              >
+              <TouchableOpacity onPress={handleDrawerClose}>
                 <Ionicons name="close" size={28} color={Colors.text} />
               </TouchableOpacity>
             </View>
@@ -755,9 +707,6 @@ export default function Dashboard() {
                 key={index}
                 style={styles.drawerItem}
                 onPress={() => handleMenuItemPress(item.route)}
-                accessible={true}
-                accessibilityLabel={item.label}
-                accessibilityRole="button"
               >
                 <Ionicons name={item.icon} size={24} color={Colors.text} />
                 <Text style={styles.drawerItemText}>{item.label}</Text>
@@ -767,27 +716,21 @@ export default function Dashboard() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Notifications Modal */}
       <Modal
         visible={notificationsVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setNotificationsVisible(false)}
+        onRequestClose={handleNotificationsClose}
       >
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
-          onPress={() => setNotificationsVisible(false)}
+          onPress={handleNotificationsClose}
         >
           <View style={styles.notificationsPanel} onStartShouldSetResponder={() => true}>
             <View style={styles.drawerHeader}>
               <Text style={styles.drawerTitle}>Notifications</Text>
-              <TouchableOpacity 
-                onPress={() => setNotificationsVisible(false)}
-                accessible={true}
-                accessibilityLabel="Close notifications"
-                accessibilityRole="button"
-              >
+              <TouchableOpacity onPress={handleNotificationsClose}>
                 <Ionicons name="close" size={28} color={Colors.text} />
               </TouchableOpacity>
             </View>
@@ -801,32 +744,35 @@ export default function Dashboard() {
                 notifications.map((notif) => (
                   <TouchableOpacity
                     key={notif._id}
-                    style={styles.notificationItem}
+                    style={[
+                      styles.notificationItem,
+                      !notif.isRead && styles.unreadNotification,
+                    ]}
                     onPress={() => {
-                      setNotificationsVisible(false);
+                      handleMarkAsRead(notif._id);
                       handleNotificationClick(notif);
                     }}
-                    accessible={true}
-                    accessibilityLabel={`${notif.title}, ${notif.message}`}
-                    accessibilityRole="button"
                   >
                     <View style={[
                       styles.notifIcon,
                       { backgroundColor: `${getNotificationColor(notif.type)}20` }
                     ]}>
-                      <Ionicons 
-                        name={getNotificationIcon(notif.type)} 
-                        size={20} 
-                        color={getNotificationColor(notif.type)} 
+                      <Ionicons
+                        name={getNotificationIcon(notif.type)}
+                        size={20}
+                        color={getNotificationColor(notif.type)}
                       />
                     </View>
                     <View style={styles.notifContent}>
                       <Text style={styles.notificationTitle}>{notif.title}</Text>
-                      <Text style={styles.notificationDesc} numberOfLines={2}>{notif.message}</Text>
+                      <Text style={styles.notificationDesc} numberOfLines={2}>
+                        {notif.message}
+                      </Text>
                       <Text style={styles.notificationTime}>
                         {formatNotificationTime(notif.createdAt)}
                       </Text>
                     </View>
+                    {!notif.isRead && <View style={styles.unreadDot} />}
                   </TouchableOpacity>
                 ))
               )}
@@ -836,7 +782,11 @@ export default function Dashboard() {
       </Modal>
     </View>
   );
-}
+});
+
+Dashboard.displayName = 'Dashboard';
+
+export default Dashboard;
 
 const styles = StyleSheet.create({
   container: {
@@ -844,8 +794,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
-    paddingTop: 50,
-    paddingBottom: 20,
+    paddingTop: StatusBar.currentHeight || 40,
+    paddingBottom: 16,
     paddingHorizontal: 20,
   },
   headerContent: {
@@ -858,9 +808,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoText: {
-    color: Colors.white,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
+    color: Colors.white,
   },
   badge: {
     position: 'absolute',
@@ -1079,11 +1029,6 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     padding: 20,
     maxHeight: '80%',
-  },
-  markAllRead: {
-    fontSize: 14,
-    color: Colors.primary,
-    fontWeight: '600',
   },
   notificationItem: {
     flexDirection: 'row',

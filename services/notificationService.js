@@ -1,4 +1,4 @@
-// services/notificationService.js - Production-optimized with silent polling
+// services/notificationService.js - Optimized with reduced polling
 import apiClient from './apiClient';
 import Constants from 'expo-constants';
 
@@ -25,17 +25,22 @@ class NotificationService {
     this.pushNotificationsEnabled = !isExpoGo && Notifications && Device;
     
     this.pollingInterval = null;
-    this.pollingIntervalMs = 15000;
+    // OPTIMIZED: Reduced from 15s to 30s - reduces server load by 50%
+    this.pollingIntervalMs = 30000;
     this.pollingCallbacks = [];
     
+    // Cache to prevent unnecessary updates
     this.lastNotificationCount = 0;
     this.lastAnnouncementCount = 0;
     this.lastUnreadCount = 0;
+    
+    // Add request deduplication
+    this.pendingRequests = new Map();
   }
 
   configure() {
     if (!this.pushNotificationsEnabled) {
-      if (DEBUG) console.log('[NotifService] Push notifications not available (Expo Go)');
+      if (DEBUG) console.log('[NotifService] Push notifications not available');
       this.isInitialized = true;
       return;
     }
@@ -59,12 +64,12 @@ class NotificationService {
 
   async registerForPushNotifications() {
     if (!this.pushNotificationsEnabled) {
-      if (DEBUG) console.log('[NotifService] Push notifications disabled in Expo Go');
+      if (DEBUG) console.log('[NotifService] Push notifications disabled');
       return null;
     }
 
     if (!Device.isDevice) {
-      if (DEBUG) console.log('[NotifService] Physical device required for push notifications');
+      if (DEBUG) console.log('[NotifService] Physical device required');
       return null;
     }
 
@@ -85,7 +90,7 @@ class NotificationService {
       const projectId = Constants.expoConfig?.extra?.eas?.projectId;
       
       if (!projectId) {
-        console.error('[NotifService] Missing project ID in app config');
+        console.error('[NotifService] Missing project ID');
         return null;
       }
 
@@ -94,11 +99,11 @@ class NotificationService {
         try {
           const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
           token = tokenData.data;
-          if (DEBUG) console.log('[NotifService] Push token obtained');
+          if (DEBUG) console.log('[NotifService] Token obtained');
           break;
         } catch (tokenError) {
           if (attempt === this.retryAttempts) {
-            console.error('[NotifService] Failed to get push token:', tokenError.message);
+            console.error('[NotifService] Token error:', tokenError.message);
           }
           if (attempt < this.retryAttempts) {
             await new Promise(resolve => setTimeout(resolve, this.retryDelay * attempt));
@@ -153,53 +158,45 @@ class NotificationService {
       this.pollForUpdates();
     }, this.pollingIntervalMs);
     
-    if (DEBUG) console.log('[NotifService] Polling started');
+    if (DEBUG) console.log('[NotifService] Polling started (30s interval)');
   }
 
   async pollForUpdates() {
     try {
-      const [notificationsResponse, announcementsData, unreadResponse] = await Promise.allSettled([
-        this.getNotifications(1, 20),
-        this.getAnnouncements(1, 10),
-        this.getUnreadCount(),
+      // OPTIMIZED: Use Promise.all instead of Promise.allSettled for faster execution
+      const [notificationsResponse, announcements, unreadData] = await Promise.all([
+        this.getNotifications(1, 20).catch(() => ({ success: false, data: [] })),
+        this.getAnnouncements(1, 10).catch(() => []),
+        this.getUnreadCount().catch(() => ({ success: false, data: { count: 0 } })),
       ]);
       
-      const notifications = notificationsResponse.status === 'fulfilled' && notificationsResponse.value?.data 
-        ? notificationsResponse.value.data 
-        : [];
-      
-      const announcements = announcementsData.status === 'fulfilled' && Array.isArray(announcementsData.value)
-        ? announcementsData.value
-        : [];
-      
-      const unreadCount = unreadResponse.status === 'fulfilled' && unreadResponse.value?.data?.count
-        ? unreadResponse.value.data.count
-        : 0;
+      const notifications = notificationsResponse?.data || [];
+      const unreadCount = unreadData?.data?.count || 0;
       
       const hasNewNotifications = notifications.length > this.lastNotificationCount;
       const hasNewAnnouncements = announcements.length > this.lastAnnouncementCount;
       const unreadChanged = unreadCount !== this.lastUnreadCount;
       
-      this.lastNotificationCount = notifications.length;
-      this.lastAnnouncementCount = announcements.length;
-      this.lastUnreadCount = unreadCount;
-      
-      if (DEBUG && (hasNewNotifications || hasNewAnnouncements || unreadChanged)) {
-        console.log('[NotifService] Changes detected');
+      // Only update and notify if there are actual changes
+      if (hasNewNotifications || hasNewAnnouncements || unreadChanged) {
+        this.lastNotificationCount = notifications.length;
+        this.lastAnnouncementCount = announcements.length;
+        this.lastUnreadCount = unreadCount;
+        
+        // Only call callbacks if there are changes
+        this.pollingCallbacks.forEach(cb => {
+          try {
+            cb({
+              notifications,
+              announcements,
+              unreadCount,
+              hasChanges: true,
+            });
+          } catch (error) {
+            console.error('[NotifService] Callback error:', error.message);
+          }
+        });
       }
-      
-      this.pollingCallbacks.forEach(cb => {
-        try {
-          cb({
-            notifications,
-            announcements,
-            unreadCount,
-            hasChanges: hasNewNotifications || hasNewAnnouncements || unreadChanged,
-          });
-        } catch (error) {
-          console.error('[NotifService] Callback error:', error.message);
-        }
-      });
       
     } catch (error) {
       console.error('[NotifService] Polling error:', error.message);
@@ -220,70 +217,94 @@ class NotificationService {
     }
   }
 
-  async getNotifications(page = 1, limit = 20, filters = {}) {
-    try {
-      const validPage = Math.max(1, parseInt(page) || 1);
-      const validLimit = Math.min(100, Math.max(1, parseInt(limit) || 20));
-      
-      const params = { page: validPage, limit: validLimit };
-      
-      if (filters.type) params.type = filters.type;
-      if (filters.isRead !== undefined) params.isRead = filters.isRead;
-
-      const response = await apiClient.get('/notifications', params);
-      
-      if (!response || !response.success) {
-        throw new Error('Invalid response from server');
-      }
-      
-      return response;
-    } catch (error) {
-      console.error('[NotifService] Get notifications error:', error.message);
-      return {
-        success: false,
-        count: 0,
-        total: 0,
-        pages: 0,
-        currentPage: page,
-        data: [],
-        error: error.message,
-      };
+  // OPTIMIZED: Add request deduplication to prevent duplicate API calls
+  async deduplicatedRequest(key, requestFn) {
+    if (this.pendingRequests.has(key)) {
+      return this.pendingRequests.get(key);
     }
+    
+    const promise = requestFn().finally(() => {
+      this.pendingRequests.delete(key);
+    });
+    
+    this.pendingRequests.set(key, promise);
+    return promise;
+  }
+
+  async getNotifications(page = 1, limit = 20, filters = {}) {
+    const requestKey = `notifications-${page}-${limit}-${JSON.stringify(filters)}`;
+    
+    return this.deduplicatedRequest(requestKey, async () => {
+      try {
+        const validPage = Math.max(1, parseInt(page) || 1);
+        const validLimit = Math.min(100, Math.max(1, parseInt(limit) || 20));
+        
+        const params = { page: validPage, limit: validLimit };
+        
+        if (filters.type) params.type = filters.type;
+        if (filters.isRead !== undefined) params.isRead = filters.isRead;
+
+        const response = await apiClient.get('/notifications', params);
+        
+        if (!response || !response.success) {
+          throw new Error('Invalid response');
+        }
+        
+        return response;
+      } catch (error) {
+        console.error('[NotifService] Get notifications error:', error.message);
+        return {
+          success: false,
+          count: 0,
+          total: 0,
+          pages: 0,
+          currentPage: page,
+          data: [],
+          error: error.message,
+        };
+      }
+    });
   }
 
   async getAnnouncements(page = 1, limit = 20) {
-    try {
-      const validPage = Math.max(1, parseInt(page) || 1);
-      const validLimit = Math.min(100, Math.max(1, parseInt(limit) || 20));
-      
-      const params = { page: validPage, limit: validLimit };
-      
-      const response = await apiClient.get('/notifications/announcements', params);
-      
-      if (!response || !response.success) {
+    const requestKey = `announcements-${page}-${limit}`;
+    
+    return this.deduplicatedRequest(requestKey, async () => {
+      try {
+        const validPage = Math.max(1, parseInt(page) || 1);
+        const validLimit = Math.min(100, Math.max(1, parseInt(limit) || 20));
+        
+        const params = { page: validPage, limit: validLimit };
+        
+        const response = await apiClient.get('/notifications/announcements', params);
+        
+        if (!response || !response.success) {
+          return [];
+        }
+        
+        return response.data || [];
+      } catch (error) {
+        console.error('[NotifService] Get announcements error:', error.message);
         return [];
       }
-      
-      return response.data || [];
-    } catch (error) {
-      console.error('[NotifService] Get announcements error:', error.message);
-      return [];
-    }
+    });
   }
 
   async getUnreadCount() {
-    try {
-      const response = await apiClient.get('/notifications/unread-count');
-      
-      if (!response || !response.success) {
-        throw new Error('Invalid response');
+    return this.deduplicatedRequest('unread-count', async () => {
+      try {
+        const response = await apiClient.get('/notifications/unread-count');
+        
+        if (!response || !response.success) {
+          throw new Error('Invalid response');
+        }
+        
+        return response;
+      } catch (error) {
+        console.error('[NotifService] Unread count error:', error.message);
+        return { success: false, data: { count: 0 } };
       }
-      
-      return response;
-    } catch (error) {
-      console.error('[NotifService] Get unread count error:', error.message);
-      return { success: false, data: { count: 0 } };
-    }
+    });
   }
 
   async markAsRead(notificationId) {
@@ -337,7 +358,7 @@ class NotificationService {
 
   addNotificationListener(callback) {
     if (!this.pushNotificationsEnabled) {
-      if (DEBUG) console.log('[NotifService] Notification listeners not available in Expo Go');
+      if (DEBUG) console.log('[NotifService] Listeners not available');
       return null;
     }
 
@@ -352,7 +373,7 @@ class NotificationService {
 
   addNotificationResponseListener(callback) {
     if (!this.pushNotificationsEnabled) {
-      if (DEBUG) console.log('[NotifService] Response listeners not available in Expo Go');
+      if (DEBUG) console.log('[NotifService] Response listeners not available');
       return null;
     }
 

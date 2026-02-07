@@ -758,13 +758,7 @@ export default function Complaints() {
               Your complaint has been successfully submitted and will be reviewed soon.
             </Text>
             
-            <View style={styles.complaintNumberContainer}>
-              <Text style={styles.complaintNumberText}>Complaint Number</Text>
-              <View style={styles.modalComplaintBadge}>
-                <Text style={styles.modalHashSymbol}>#</Text>
-                <Text style={styles.modalComplaintNumber}>{submittedComplaintNumber}</Text>
-              </View>
-            </View>
+            <Text style={styles.modalComplaintNumber}>#{submittedComplaintNumber}</Text>
             
             <View style={styles.modalButtons}>
               <TouchableOpacity 
@@ -1313,45 +1307,14 @@ const styles = StyleSheet.create({
     color: Colors.textLight,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 24,
-  },
-  complaintNumberContainer: {
-    width: '100%',
-    backgroundColor: Colors.primaryLight,
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 24,
-    borderWidth: 2,
-    borderColor: Colors.primary,
-  },
-  complaintNumberText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textLight,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  modalComplaintBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.white,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  modalHashSymbol: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: Colors.primary,
-    marginRight: 4,
+    marginBottom: 16,
   },
   modalComplaintNumber: {
-    fontSize: 20,
+    fontSize: 32,
     fontWeight: 'bold',
     color: Colors.primary,
     letterSpacing: 1,
+    marginBottom: 24,
   },
   modalButtons: {
     flexDirection: 'row',

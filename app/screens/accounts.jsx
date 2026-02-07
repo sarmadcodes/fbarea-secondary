@@ -43,24 +43,21 @@ export default function Accounts() {
   const [bankDetails, setBankDetails] = useState(null);
   
   const [selectedImage, setSelectedImage] = useState(null);
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageReady, setImageReady] = useState(false);
   const [transactionId, setTransactionId] = useState('');
   const [remarks, setRemarks] = useState('');
 
-  // ✅ NEW: Notification state
   const [hasNewNotification, setHasNewNotification] = useState(false);
   const notificationUnsubscribeRef = useRef(null);
-
-  // ✅ Prevent duplicate requests with ref
   const loadingRef = useRef(false);
   const abortControllerRef = useRef(null);
 
-  // ✅ Cleanup on unmount
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-      // ✅ Clean up notification listener
       if (notificationUnsubscribeRef.current) {
         notificationUnsubscribeRef.current();
       }
@@ -69,9 +66,6 @@ export default function Accounts() {
 
   useEffect(() => {
     loadData();
-    
-    // ✅ NEW: Subscribe to payment notifications
-    // setupNotificationListener();
     
     return () => {
       if (notificationUnsubscribeRef.current) {
@@ -86,77 +80,7 @@ export default function Accounts() {
     }
   }, [selectedMonth]);
 
-  // ✅ NEW: Setup notification listener for payment updates
-  const setupNotificationListener = () => {
-    console.log('🔔 [Accounts] Setting up payment notification listener...');
-    
-    const unsubscribe = notificationService.subscribeToNotifications((data) => {
-      console.log('🔔 [Accounts] Received notification:', data.type);
-      
-      if (data.type === 'payment' && data.notifications && data.notifications.length > 0) {
-        const latestNotification = data.notifications[0];
-        
-        console.log('💰 [Accounts] Payment notification received:', latestNotification.title);
-        
-        // Show in-app alert
-        showPaymentNotificationAlert(latestNotification);
-        
-        // Mark as having new notification
-        setHasNewNotification(true);
-        
-        // Reload payment data
-        loadData(true);
-        if (selectedMonth) {
-          loadPaymentForMonth(selectedMonth);
-        }
-      }
-    });
-    
-    notificationUnsubscribeRef.current = unsubscribe;
-  };
-
-  // ✅ NEW: Show in-app alert for payment notifications
-  const showPaymentNotificationAlert = (notification) => {
-    const isApproved = notification.title.includes('Approved');
-    const isRejected = notification.title.includes('Rejected');
-    
-    Alert.alert(
-      notification.title,
-      notification.message,
-      [
-        {
-          text: 'View Details',
-          onPress: () => {
-            // Mark notification as read
-            notificationService.markAsRead(notification._id).catch(err => 
-              console.error('Failed to mark as read:', err)
-            );
-            
-            // Reload data
-            loadData(true);
-            if (selectedMonth) {
-              loadPaymentForMonth(selectedMonth);
-            }
-          }
-        },
-        {
-          text: 'OK',
-          onPress: () => {
-            // Mark notification as read
-            notificationService.markAsRead(notification._id).catch(err => 
-              console.error('Failed to mark as read:', err)
-            );
-            setHasNewNotification(false);
-          }
-        }
-      ],
-      { cancelable: false }
-    );
-  };
-
-  // ✅ OPTIMIZED: Prevent duplicate API calls with loading flag
   const loadData = async (isRefresh = false) => {
-    // ✅ Prevent duplicate calls
     if (loadingRef.current && !isRefresh) {
       console.log('⏭️ Skipping duplicate loadData call');
       return;
@@ -171,13 +95,11 @@ export default function Accounts() {
         setLoading(true);
       }
 
-      // ✅ Cancel previous request if exists
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
       abortControllerRef.current = new AbortController();
 
-      // ✅ CRITICAL FIX: Run all API calls in PARALLEL (much faster!)
       const [
         monthsResponse,
         statsResponse,
@@ -190,12 +112,10 @@ export default function Accounts() {
         paymentService.getBankDetails(),
       ]);
 
-      // ✅ Handle months data
       if (monthsResponse.status === 'fulfilled' && monthsResponse.value?.data) {
         const availableMonths = monthsResponse.value.data;
         setMonths(availableMonths);
 
-        // Set current month as default (only if not already set)
         if (availableMonths.length > 0 && !selectedMonth) {
           setSelectedMonth(availableMonths[0].value);
         }
@@ -204,7 +124,6 @@ export default function Accounts() {
         setMonths([]);
       }
 
-      // ✅ Handle stats data
       if (statsResponse.status === 'fulfilled' && statsResponse.value?.data) {
         setStats(statsResponse.value.data);
       } else {
@@ -212,7 +131,6 @@ export default function Accounts() {
         setStats(null);
       }
 
-      // ✅ Handle history data
       if (historyResponse.status === 'fulfilled' && historyResponse.value?.data) {
         setPaymentHistory(historyResponse.value.data);
       } else {
@@ -220,14 +138,12 @@ export default function Accounts() {
         setPaymentHistory([]);
       }
 
-      // ✅ Handle bank details
       if (bankResponse.status === 'fulfilled' && bankResponse.value?.data) {
         setBankDetails(bankResponse.value.data);
       } else {
         console.error('Failed to load bank details:', bankResponse.reason);
       }
 
-      // ✅ Only show error if ALL requests failed
       const allFailed = [monthsResponse, statsResponse, historyResponse, bankResponse]
         .every(r => r.status === 'rejected');
 
@@ -236,7 +152,6 @@ export default function Accounts() {
       }
 
     } catch (error) {
-      // ✅ Ignore abort errors
       if (error.name === 'AbortError') {
         console.log('Request was cancelled');
         return;
@@ -251,7 +166,6 @@ export default function Accounts() {
     }
   };
 
-  // ✅ OPTIMIZED: Debounced pull-to-refresh
   const onRefresh = async () => {
     if (loadingRef.current) {
       console.log('⏭️ Skipping duplicate refresh');
@@ -261,12 +175,10 @@ export default function Accounts() {
     console.log('🔄 Refreshing payment data...');
     await loadData(true);
     
-    // Also reload current payment if a month is selected
     if (selectedMonth) {
       await loadPaymentForMonth(selectedMonth);
     }
     
-    // Clear new notification badge
     setHasNewNotification(false);
   };
 
@@ -315,15 +227,64 @@ export default function Accounts() {
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-    });
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
 
-    if (!result.canceled) {
-      setSelectedImage(result.assets[0].uri);
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const imageUri = result.assets[0].uri;
+        
+        console.log('🖼️ Image selected:', imageUri);
+        
+        setImageLoading(true);
+        setImageReady(false);
+        setSelectedImage(imageUri);
+
+        await validateImage(imageUri);
+      }
+    } catch (error) {
+      console.error('❌ Error picking image:', error);
+      showAlert('Error', 'Failed to select image. Please try again.', [], 'error');
+      setSelectedImage(null);
+      setImageLoading(false);
+      setImageReady(false);
+    }
+  };
+
+  const validateImage = async (imageUri) => {
+    try {
+      await new Promise((resolve, reject) => {
+        Image.getSize(
+          imageUri,
+          (width, height) => {
+            console.log('✅ Image validated:', width, 'x', height);
+            resolve({ width, height });
+          },
+          (error) => {
+            console.error('❌ Image validation failed:', error);
+            reject(error);
+          }
+        );
+      });
+
+      console.log('⏳ Preparing image for upload...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      setImageReady(true);
+      setImageLoading(false);
+      
+      console.log('✅ Image ready for upload');
+    } catch (error) {
+      console.error('❌ Image validation failed:', error);
+      showAlert('Error', 'Failed to process image. Please select a different image.', [], 'error');
+      
+      setSelectedImage(null);
+      setImageReady(false);
+      setImageLoading(false);
     }
   };
 
@@ -333,7 +294,11 @@ export default function Accounts() {
       return;
     }
 
-    // ✅ Prevent duplicate submissions
+    if (!imageReady) {
+      showAlert('Please Wait', 'Image is still processing. Please wait a moment.', [], 'warning');
+      return;
+    }
+
     if (submitting) {
       console.log('⏭️ Already submitting payment...');
       return;
@@ -341,6 +306,7 @@ export default function Accounts() {
 
     try {
       setSubmitting(true);
+      console.log('📤 Submitting payment proof...');
 
       await paymentService.submitPaymentProof(
         currentPayment._id,
@@ -349,22 +315,54 @@ export default function Accounts() {
         remarks
       );
 
-      showAlert('Success', 'Payment proof submitted successfully! Waiting for admin approval.', [{ text: 'OK', onPress: () => {
+      console.log('✅ Payment proof submitted successfully');
+
+      showAlert('Success', 'Payment proof submitted successfully! Waiting for admin approval.', [{ 
+        text: 'OK', 
+        onPress: () => {
           setUploadModalVisible(false);
-          setSelectedImage(null);
-          setTransactionId('');
-          setRemarks('');
-          // ✅ Only reload once, not twice
+          resetUploadForm();
           loadData(false);
           if (selectedMonth) {
             loadPaymentForMonth(selectedMonth);
           }
-        }}], 'success');
+        }
+      }], 'success');
     } catch (error) {
-      showAlert('Error', error.message || 'Failed to submit payment proof');
+      console.error('❌ Submit payment failed:', error);
+      showAlert('Error', error.message || 'Failed to submit payment proof. Please try again.', [], 'error');
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const resetUploadForm = () => {
+    setSelectedImage(null);
+    setImageReady(false);
+    setImageLoading(false);
+    setTransactionId('');
+    setRemarks('');
+  };
+
+  const getDaysRemaining = (dueDate) => {
+    if (!dueDate) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(dueDate);
+    due.setHours(0, 0, 0, 0);
+    const diffTime = due - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+  };
+
+  const formatDueDate = (dueDate) => {
+    if (!dueDate) return 'Not set';
+    const date = new Date(dueDate);
+    return date.toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
   };
 
   const getStatusColor = (status) => {
@@ -456,18 +454,15 @@ export default function Accounts() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
       
-
-      {/* Custom Alert */}
       <AlertComponent />
       
-      {/* Header */}
+      {/* ✅ FIXED: Properly Aligned Header */}
       <LinearGradient colors={[Colors.primary, Colors.secondary]} style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={Colors.white} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Accounts</Text>
-        {/* ✅ NEW: Notification badge */}
-        <View>
+        <View style={styles.headerRight}>
           {hasNewNotification && (
             <View style={styles.notificationBadge}>
               <Ionicons name="notifications" size={20} color={Colors.white} />
@@ -489,7 +484,6 @@ export default function Accounts() {
         }
         ListHeaderComponent={
           <>
-            {/* ✅ NEW: Update notification banner */}
             {hasNewNotification && (
               <TouchableOpacity 
                 style={styles.updateBanner}
@@ -503,7 +497,6 @@ export default function Accounts() {
               </TouchableOpacity>
             )}
             
-            {/* Month Selector */}
             <View style={[styles.section, { zIndex: 1000 }]}>
               <Text style={styles.sectionTitle}>Select Month</Text>
               <DropDownPicker
@@ -520,7 +513,6 @@ export default function Accounts() {
               />
             </View>
 
-            {/* Current Payment Card */}
             {currentPayment && (
               <View style={styles.section}>
                 <View style={styles.balanceCard}>
@@ -540,6 +532,7 @@ export default function Accounts() {
                     <Text style={styles.balanceAmount}>
                       Rs. {currentPayment.amount.toLocaleString()}
                     </Text>
+                    
                     <View style={styles.balanceStatus}>
                       <View style={styles.statusBadge}>
                         <Text style={styles.statusText}>
@@ -547,11 +540,13 @@ export default function Accounts() {
                         </Text>
                       </View>
                     </View>
+
                     {currentPayment.status === 'submitted' && (
                       <Text style={styles.submittedText}>
                         Awaiting admin approval
                       </Text>
                     )}
+                    
                     {currentPayment.status === 'rejected' && currentPayment.rejectionReason && (
                       <Text style={styles.submittedText}>
                         Reason: {currentPayment.rejectionReason}
@@ -578,7 +573,6 @@ export default function Accounts() {
               </View>
             )}
 
-            {/* Payment History Header */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Payment History</Text>
             </View>
@@ -627,7 +621,6 @@ export default function Accounts() {
         }
       />
 
-      {/* Payment Confirmation Modal */}
       <Modal
         visible={paymentModalVisible}
         animationType="slide"
@@ -693,18 +686,23 @@ export default function Accounts() {
         </View>
       </Modal>
 
-      {/* Upload Screenshot Modal */}
       <Modal
         visible={uploadModalVisible}
         animationType="slide"
         transparent
-        onRequestClose={() => setUploadModalVisible(false)}
+        onRequestClose={() => {
+          setUploadModalVisible(false);
+          resetUploadForm();
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.paymentModal}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Upload Payment Proof</Text>
-              <TouchableOpacity onPress={() => setUploadModalVisible(false)}>
+              <TouchableOpacity onPress={() => {
+                setUploadModalVisible(false);
+                resetUploadForm();
+              }}>
                 <Ionicons name="close" size={28} color={Colors.text} />
               </TouchableOpacity>
             </View>
@@ -714,7 +712,11 @@ export default function Accounts() {
               data={[{ key: 'upload' }]}
               renderItem={() => (
                 <>
-                  <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
+                  <TouchableOpacity 
+                    style={styles.uploadButton} 
+                    onPress={pickImage}
+                    disabled={imageLoading}
+                  >
                     <Ionicons name="cloud-upload-outline" size={32} color={Colors.primary} />
                     <Text style={styles.uploadButtonText}>
                       {selectedImage ? 'Change Screenshot' : 'Upload Screenshot'}
@@ -723,7 +725,25 @@ export default function Accounts() {
 
                   {selectedImage && (
                     <View style={styles.imagePreviewContainer}>
-                      <Image source={{ uri: selectedImage }} style={styles.imagePreview} />
+                      <Image 
+                        source={{ uri: selectedImage }} 
+                        style={styles.imagePreview} 
+                      />
+                      
+                      {imageLoading && (
+                        <View style={styles.imageLoadingOverlay}>
+                          <ActivityIndicator size="large" color={Colors.primary} />
+                          <Text style={styles.imageLoadingText}>Processing image...</Text>
+                          <Text style={styles.imageLoadingSubtext}>This ensures reliable upload</Text>
+                        </View>
+                      )}
+                      
+                      {imageReady && !imageLoading && (
+                        <View style={styles.imageReadyBadge}>
+                          <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+                          <Text style={styles.imageReadyText}>Ready to submit</Text>
+                        </View>
+                      )}
                     </View>
                   )}
 
@@ -735,6 +755,7 @@ export default function Accounts() {
                       value={transactionId}
                       onChangeText={setTransactionId}
                       maxLength={100}
+                      editable={!submitting}
                     />
                   </View>
 
@@ -748,18 +769,27 @@ export default function Accounts() {
                       multiline
                       numberOfLines={4}
                       maxLength={500}
+                      editable={!submitting}
                     />
                   </View>
 
                   <TouchableOpacity
-                    style={[styles.confirmButton, (submitting || !selectedImage) && styles.disabledButton]}
+                    style={[
+                      styles.confirmButton, 
+                      (submitting || !selectedImage || !imageReady) && styles.disabledButton
+                    ]}
                     onPress={handleSubmitPayment}
-                    disabled={submitting || !selectedImage}
+                    disabled={submitting || !selectedImage || !imageReady}
                   >
                     {submitting ? (
-                      <ActivityIndicator color={Colors.white} />
+                      <>
+                        <ActivityIndicator color={Colors.white} size="small" style={{ marginRight: 8 }} />
+                        <Text style={styles.confirmButtonText}>Uploading...</Text>
+                      </>
                     ) : (
-                      <Text style={styles.confirmButtonText}>Submit Payment Proof</Text>
+                      <Text style={styles.confirmButtonText}>
+                        {!imageReady && selectedImage ? 'Processing...' : 'Submit Payment Proof'}
+                      </Text>
                     )}
                   </TouchableOpacity>
                 </>
@@ -796,13 +826,19 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
+    width: 40,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: Colors.white,
+    flex: 1,
+    textAlign: 'center',
   },
-  // ✅ NEW: Notification badge styles
+  headerRight: {
+    width: 40,
+    alignItems: 'flex-end',
+  },
   notificationBadge: {
     position: 'relative',
   },
@@ -817,7 +853,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.white,
   },
-  // ✅ NEW: Update banner styles
   updateBanner: {
     backgroundColor: Colors.primary,
     flexDirection: 'row',
@@ -1097,6 +1132,8 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
   confirmButtonText: {
     color: Colors.white,
@@ -1123,11 +1160,55 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderRadius: 12,
     overflow: 'hidden',
+    position: 'relative',
   },
   imagePreview: {
     width: '100%',
     height: 200,
     resizeMode: 'cover',
+  },
+  imageLoadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  imageLoadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  imageLoadingSubtext: {
+    marginTop: 4,
+    fontSize: 12,
+    color: Colors.textLight,
+  },
+  imageReadyBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  imageReadyText: {
+    fontSize: 12,
+    color: '#4CAF50',
+    fontWeight: '600',
   },
   inputContainer: {
     marginBottom: 16,

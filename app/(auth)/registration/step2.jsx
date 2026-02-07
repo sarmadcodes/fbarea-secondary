@@ -117,9 +117,19 @@ export default function RegistrationStep2() {
       return;
     }
 
-    // Check if at least profile picture is selected
+    // Check if all three images are uploaded
     if (!profilePic) {
       showAlert('Validation Error', 'Profile picture is required', [], 'warning');
+      return;
+    }
+
+    if (!cnicFront) {
+      showAlert('Validation Error', 'CNIC front image is required', [], 'warning');
+      return;
+    }
+
+    if (!cnicBack) {
+      showAlert('Validation Error', 'CNIC back image is required', [], 'warning');
       return;
     }
 
@@ -304,7 +314,7 @@ export default function RegistrationStep2() {
 
           {/* CNIC Front */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>CNIC Front Side (Optional)</Text>
+            <Text style={styles.sectionTitle}>CNIC Front Side * (Required)</Text>
             <View style={styles.imageCard}>
               {cnicFront ? (
                 <Image source={{ uri: cnicFront }} style={styles.cnicPreview} />
@@ -339,7 +349,7 @@ export default function RegistrationStep2() {
 
           {/* CNIC Back */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>CNIC Back Side (Optional)</Text>
+            <Text style={styles.sectionTitle}>CNIC Back Side * (Required)</Text>
             <View style={styles.imageCard}>
               {cnicBack ? (
                 <Image source={{ uri: cnicBack }} style={styles.cnicPreview} />
