@@ -2,15 +2,15 @@ import { Platform } from 'react-native';
 
 const getApiBaseUrl = () => {
  
-  const ACTUAL_IP = '192.168.100.192'; // Your backend IP
+  const ACTUAL_IP = 'api.fbareaadmin.cloud'; // Your backend IP
   const PORT = '5000';
   
   if (__DEV__) {
     
-    return `http://192.168.100.192:5000/api`;
+    return `http://api.fbareaadmin.cloud/api`;
   } else {
     // Production mode
-    return `http://${ACTUAL_IP}:${PORT}/api`;
+    return `https://${ACTUAL_IP}/api`;
   }
 };
 
